@@ -3,13 +3,18 @@ name: Build Native Library
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Set up NDK
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
@@ -17,31 +22,25 @@ jobs:
 
       - name: Clone llama.cpp
         run: |
-          git clone https://github.com/ggerganov/llama.cpp.git native-src/llama.cpp
-          git -C native-src/llama.cpp checkout master
+          git clone --depth 1 https://github.com/ggerganov/llama.cpp.git native-src/llama.cpp
 
-      - name: Build arm64-v8a
+      - name: Configure arm64-v8a build
         run: |
           cmake -S native-src -B build-arm64 \
-            -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE="${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-arm64 --target llama_bridge -j4
 
-      - name: Build armeabi-v7a
+      - name: Build arm64-v8a
         run: |
-          cmake -S native-src -B build-armv7 \
-            -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-24 \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-armv7 --target llama_bridge -j4
+          cmake --build build-arm64 \
+            --target llama_bridge \
+            --parallel 4
 
-      - name: Upload built libraries
+      - name: Upload built library
         uses: actions/upload-artifact@v4
         with:
           name: llama_bridge-libs
-          path: |
-            build-arm64/**/libllama_bridge.so
-            build-armv7/**/libllama_bridge.so
+          path: build-arm64/**/libllama_bridge.so
+          if-no-files-found: error
