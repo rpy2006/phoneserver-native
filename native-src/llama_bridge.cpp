@@ -51,7 +51,16 @@ Java_com_yadaventerprise_phoneserver_LlmEngine_nativeLoadModel(
 
     llama_sampler_chain_params samplerParams = llama_sampler_chain_default_params();
     llama_sampler *sampler = llama_sampler_chain_init(samplerParams);
-    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.1f, 0.0f, 0.0f));
+
+    llama_sampler_chain_add(
+            sampler,
+            llama_sampler_init_penalties(
+                    64,
+                    1.1f,
+                    0.0f,
+                    0.0f,
+                    false));
+
     llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.7f));
     llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.9f, 1));
     llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
@@ -103,14 +112,21 @@ Java_com_yadaventerprise_phoneserver_LlmEngine_nativeGenerate(
             "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n";
 
     const llama_model *model = modelContext->model;
+    const llama_vocab *vocab = llama_model_get_vocab(model);
     llama_context *ctx = modelContext->ctx;
     llama_sampler *sampler = modelContext->sampler;
 
     const int maxTokens = 1024;
     std::vector<llama_token> tokens(maxTokens);
+
     int nTokens = llama_tokenize(
-            model, formattedPrompt.c_str(), (int32_t) formattedPrompt.size(),
-            tokens.data(), maxTokens, true, true);
+            vocab,
+            formattedPrompt.c_str(),
+            static_cast<int32_t>(formattedPrompt.size()),
+            tokens.data(),
+            maxTokens,
+            true,
+            true);
 
     if (nTokens < 0) {
         LOGE("Prompt too long for context");
@@ -118,7 +134,7 @@ Java_com_yadaventerprise_phoneserver_LlmEngine_nativeGenerate(
     }
     tokens.resize(nTokens);
 
-    llama_batch batch = llama_batch_get_one(tokens.data(), (int32_t) tokens.size());
+    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
     if (llama_decode(ctx, batch) != 0) {
         LOGE("llama_decode failed on prompt");
         return;
@@ -134,8 +150,12 @@ Java_com_yadaventerprise_phoneserver_LlmEngine_nativeGenerate(
 
         char pieceBuffer[256];
         int pieceLen = llama_token_to_piece(
-                llama_model_get_vocab(model), newToken, pieceBuffer, sizeof(pieceBuffer),
-                0, false);
+                llama_model_get_vocab(model),
+                newToken,
+                pieceBuffer,
+                sizeof(pieceBuffer),
+                0,
+                false);
 
         if (pieceLen > 0) {
             std::string piece(pieceBuffer, pieceLen);
